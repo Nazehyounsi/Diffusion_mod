@@ -142,6 +142,7 @@ class EventEmbedder(nn.Module):
 data = load_data_from_folder(folder_path)
 data = preprocess_data(data)
 dataset = MotivationalInterviewingDataset(data)
+
 dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
 
@@ -152,11 +153,11 @@ continuous_embedding_dim = 3
 embedder = EventEmbedder(num_event_types, event_embedding_dim, continuous_embedding_dim, event_weights=None)
 
 #for epoch ?
-for observations, actions, chunk_descriptors in dataloader:
+#for observations, actions, chunk_descriptors in dataloader:
 
     # Convert observations to tensors and pass through the embedder
     #observations_tensor = torch.tensor(observations, dtype=torch.float32)
-    embedded_observations = embedder(observations)
+    #embedded_observations = embedder(observations)
 
     #convert chunk desk into tensor (done already)
     #concat the embeddeb obs to chunk descriptor
