@@ -49,7 +49,7 @@ def is_valid_chunk(chunk):
 
 def load_data_from_folder(folder_path):
     all_data = []  # This list will hold all our chunks (both observations and actions) from all files.
-
+    total_lines = 0
     # Iterate over each file in the directory
     for file in os.listdir(folder_path):
         # If the file ends with '.txt', we process it
@@ -57,6 +57,7 @@ def load_data_from_folder(folder_path):
             with open(os.path.join(folder_path, file), 'r') as f:
                 # Read the lines and filter out any empty ones.
                 lines = f.readlines()
+                total_lines += len(lines)
                 non_empty_lines = [line.strip() for line in lines if line.strip() != ""]
 
                 # Transform the non-empty line strings into actual list of tuples.
@@ -79,7 +80,6 @@ def load_data_from_folder(folder_path):
 
                 # Extend the all_data list with the observation, action, and chunk descriptor
                 all_data.extend(list(zip(observation_chunks, action_chunks, chunk_descriptors)))
-
     return all_data  # Return the master list containing chunks from all files
 
 
@@ -130,6 +130,7 @@ class MyCustomDataset(Dataset):
     def __init__(self, folder_path, train_or_test="train", train_prop=0.90):
         # Load and preprocess data
         raw_data = load_data_from_folder(folder_path)
+        self.raw_data_length = len(raw_data)
         processed_data = preprocess_data(raw_data)
 
         # Split the data into training and testing based on train_prop
@@ -141,90 +142,74 @@ class MyCustomDataset(Dataset):
         else:
             raise ValueError("train_or_test should be either 'train' or 'test'")
 
+        # Transform data into the new format
+        self.transformed_data = []
+        last_action = None  # Initialize last action as None
+        for observation, action, chunk_descriptor in self.data:
+            for i in range(len(action)):
+                if i == 0 and last_action is not None:
+                    prev_action = last_action
+                else:
+                    prev_action = action[i - 1] if i > 0 else [0] * len(
+                        action[0])  # Use zero vector if no previous action
+
+                x = observation + [prev_action]
+                y = action[i]
+                self.transformed_data.append((x, y, chunk_descriptor))
+
+            last_action = action[-1]  # Save the last action of the current sequence
+
     def __len__(self):
-        # Return the number of data points
-        return len(self.data)
+        # Return the number of transformed data points
+        return len(self.transformed_data)
 
     def __getitem__(self, idx):
-        # Retrieve the observation, action, and chunk descriptor at the given index
-        observation, action, chunk_descriptor = self.data[idx]
+        # Retrieve the transformed data point at the given index
+        x, y, chunk_descriptor = self.transformed_data[idx]
 
-        # Convert tuples into tensors for PyTorch
-        observation_tensor = torch.tensor(observation, dtype=torch.float32)
-        action_tensor = torch.tensor(action, dtype=torch.float32)
+        # Convert lists into tensors for PyTorch
+        x_tensor = torch.tensor(x, dtype=torch.float32)
+        y_tensor = torch.tensor(y, dtype=torch.float32)
         chunk_descriptor_tensor = torch.tensor(chunk_descriptor, dtype=torch.float32)
 
-        return observation_tensor, action_tensor, chunk_descriptor_tensor
+        return x_tensor, y_tensor, chunk_descriptor_tensor
 
-    #Padding same length action and obs
     def collate_fn(batch):
-        observations, actions, chunk_descriptors = zip(*batch)
+        # Unzip the batch into separate lists
+        x_data, y_data, chunk_descriptors = zip(*batch)
 
-        # Determine the maximum sequence length
-        max_len = max(max(len(obs) for obs in observations), max(len(act) for act in actions))
+        # Separate observations and previous actions
+        observations = [x[:-1] for x in x_data]  # All elements except the last one
+        prev_actions = [x[-1] for x in x_data]  # Only the last element
 
-        # Pad sequences
-        observations_padded = torch.nn.utils.rnn.pad_sequence(observations, batch_first=True, padding_value=0)
-        actions_padded = torch.nn.utils.rnn.pad_sequence(actions, batch_first=True, padding_value=0)
+        # Pad the observation sequences
+        observations_padded = torch.nn.utils.rnn.pad_sequence([obs.clone().detach() for obs in observations],
+                                                              batch_first=True, padding_value=0)
 
-        # Determine the maximum length across both observations and actions
-        max_length = max(observations_padded.shape[1], actions_padded.shape[1])
+        #prev_actions_tensor = torch.stack([torch.tensor(pa) for pa in prev_actions])
 
-        # Manually pad to the maximum length
-        if observations_padded.shape[1] < max_length:
-            # Calculate padding size
-            padding_size = max_length - observations_padded.shape[1]
-            # Pad observations
-            observations_padded = torch.cat([observations_padded,
-                                             torch.zeros(observations_padded.shape[0], padding_size,
-                                                         observations_padded.shape[2])], dim=1)
+        # Convert previous actions to tensor
+        prev_actions_tensor = torch.stack([pa.clone().detach() for pa in prev_actions])
 
-        if actions_padded.shape[1] < max_length:
-            # Calculate padding size
-            padding_size = max_length - actions_padded.shape[1]
-            # Pad actions
-            actions_padded = torch.cat(
-                [actions_padded, torch.zeros(actions_padded.shape[0], padding_size, actions_padded.shape[2])], dim=1)
+        # Concatenate the padded observations with the previous actions
+        x_tensors = torch.cat([observations_padded, prev_actions_tensor.unsqueeze(1)], dim=1)
 
-        return observations_padded, actions_padded, torch.stack(chunk_descriptors)
+        # Convert y_data to tensor
+        y_tensors = torch.stack([y.clone().detach() for y in y_data])
 
-    # #Padding only intra obs or intra action not inbetween
-    # def collate_fn(batch):
-    #     observations, actions, chunk_descriptors = zip(*batch)
-    #
-    #     # Pad sequences
-    #     observations_padded = pad_sequence(observations, batch_first=True, padding_value=0)
-    #     actions_padded = pad_sequence(actions, batch_first=True, padding_value=0)
-    #
-    #     return observations_padded, actions_padded, torch.stack(chunk_descriptors)
+        # Convert chunk_descriptors to tensor
+        chunk_descriptors_tensor = torch.stack([cd.clone().detach() for cd in chunk_descriptors])
 
-    def get_data_shapes(self):
-        # Assuming the first data point is representative of the entire dataset
-        observation, action, chunk_descriptor = self.data[55]
-        observation_length = len(observation)
-        action_length = len(action)
-        chunk_descriptor_length = len(chunk_descriptor)
-        return observation_length, action_length, chunk_descriptor_length
+        return x_tensors, y_tensors, chunk_descriptors_tensor
 
-# # Usage
-# folder_path = 'C:/Users/NEZIH YOUNSI/Desktop/Hcapriori_input/Observaton_Context_Tuples'
-# train_dataset = MyCustomDataset(folder_path, train_or_test="train")
-# test_dataset = MyCustomDataset(folder_path, train_or_test="test")
-# observation_length, action_length, chunk_descriptor_length = train_dataset.get_data_shapes()
-# train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn=MyCustomDataset.collate_fn)
-# test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
-# # To test and see the data
-# for observation, action, chunk_descriptor in train_dataloader:
-#     print(observation, action, chunk_descriptor)
-#     break  # Remove this line to iterate through the entire dataset
-
-#
 def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, net_type, EXTRA_DIFFUSION_STEPS, GUIDE_WEIGHTS):
     # Unpack experiment settings
     exp_name = experiment["exp_name"]
     model_type = experiment["model_type"]
     drop_prob = experiment["drop_prob"]
+
+    torch.autograd.set_detect_anomaly(True)
 
     # get datasets set up
     tf = transforms.Compose([])
@@ -234,14 +219,20 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
 
     # Use MyCustomDataset instead of ClawCustomDataset
     torch_data_train = MyCustomDataset(folder_path, train_or_test="train", train_prop=0.90)
-    test_dataset = MyCustomDataset(folder_path, train_or_test="test")
-    dataload_train = DataLoader(torch_data_train, batch_size=batch_size, shuffle=True, collate_fn=MyCustomDataset.collate_fn)
-    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    #test_dataset = MyCustomDataset(folder_path, train_or_test="test")
+    dataload_train = DataLoader(torch_data_train, batch_size=batch_size, shuffle=False, collate_fn=MyCustomDataset.collate_fn)
+    #test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+
+    # Calculate the total number of batches
+    total_batches = len(dataload_train)
+    print(f"Total number of batches: {total_batches}")
+    print(f"Number of samples in raw data: {torch_data_train.raw_data_length}")
+
 
     event_embedder = EventEmbedder(num_event_types, event_embedding_dim, continuous_embedding_dim,embed_output_dim, event_weights=None)
 
    # Determine the shape of input and output tensors
-    sample_observation, sample_action, _ = torch_data_train[0]
+    sample_observation, sample_action,_ = torch_data_train[0]
     input_shape = sample_observation.shape
     output_dim = sample_action.shape[0]
 
@@ -267,6 +258,10 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
         )
     else:
         raise NotImplementedError
+
+    # Count the number of trainable parameters
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total trainable parameters: {total_params}")
 
     model.to(device)
     optim = torch.optim.Adam(model.parameters(), lr=lrate)

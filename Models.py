@@ -16,7 +16,6 @@ class TimeSiren(nn.Module):
         x = self.lin2(x)
         return x
 
-
 class EventEmbedder(nn.Module):
     def __init__(self, num_event_types, event_embedding_dim, continuous_embedding_dim,output_dim,event_weights=None):
         super(EventEmbedder, self).__init__()
@@ -47,6 +46,13 @@ class EventEmbedder(nn.Module):
 
         concatenated_embeddings = torch.cat([event_type_embed, duration_embed, start_time_embed], dim=-1)
         output, _ = self.interaction_lstm(concatenated_embeddings)
+
+        last_element_weight = 1.5  # This is an example weight, adjust as needed
+        weighted_last_element = output[:, -1, :] * last_element_weight
+
+        # Replace the last element with the weighted version
+        output = torch.cat((output[:, :-1, :], weighted_last_element.unsqueeze(1)), dim=1)
+
         return output
 
 
@@ -228,15 +234,11 @@ class Model_Cond_Diffusion(nn.Module):
         noise = torch.randn_like(y_batch).to(self.device)
         self.y_dim = noise.shape
 
-        expanded_sqrtab = self.sqrtab[_ts].unsqueeze(-1).expand(-1, y_batch.shape[1], 3)
-        expanded_sqrtmab= self.sqrtmab[_ts].unsqueeze(-1).expand(-1, y_batch.shape[1], 3)
-
         # add noise to clean target actions
-        y_t = expanded_sqrtab * y_batch + expanded_sqrtmab * noise
+        y_t = self.sqrtab[_ts] * y_batch + self.sqrtmab[_ts] * noise
         # use nn model to predict noise
         noise_pred_batch = self.nn_model(y_t, x_batch, _ts / self.n_T)
 
-        #print(noise)
         # return mse between predicted and true noise
         return self.loss_mse(noise, noise_pred_batch)
 
@@ -492,7 +494,7 @@ class SequenceTransformer(nn.Module):
         # Pass through the transformer encoder
         x = self.transformer_encoder(x)
 
-        print(x.shape)
+
 
 
 
@@ -598,12 +600,17 @@ class Model_mlp_diff(nn.Module):
 
     def forward(self, y, x, t):
 
-        # Embed x and t (peut être enlever la ligne event embedder, et garder que le transformer)
-        x = self.event_embedder(x)
+        #in the case we need to process separatly observation and past action through different pipelines (not only with weighted event_embedder)
+        # observations = x[:, :-1, :]  # All elements except the last
+        # past_actions = x[:, -1, :]  # Only the last element
+
+
         embedded_t = self.time_siren(t)
 
+        x = self.event_embedder(x)
+
         # Transform sequences
-        #transformed_x = self.x_sequence_transformer(x)
+        x = self.x_sequence_transformer(x)
         #transformed_y = self.y_sequence_transformer(y)
 
         # Project embeddings to transformer dimension
@@ -611,12 +618,13 @@ class Model_mlp_diff(nn.Module):
         y_input = self.y_to_input(y)
         x_input = self.x_to_input(x)
 
-        t_input = t_input.unsqueeze(1).repeat(1, x.shape[1], 1)
+
+        #t_input = t_input.unsqueeze(1).repeat(1, x.shape[1], 1)
 
         # Add positional encoding
-        t_input += self.pos_embed(torch.zeros(x.shape[0],x.shape[1], 1).to(x.device) + 1.0)
-        y_input += self.pos_embed(torch.zeros(y.shape[0],y.shape[1], 1).to(x.device) + 2.0)
-        x_input += self.pos_embed(torch.zeros(x.shape[0], x.shape[1], 1).to(x.device) + 3.0)
+        t_input += self.pos_embed(torch.zeros(x.shape[0], 1).to(x.device) + 1.0)
+        y_input += self.pos_embed(torch.zeros(y.shape[0], 1).to(x.device) + 2.0)
+        x_input += self.pos_embed(torch.zeros(x.shape[0], 1).to(x.device) + 3.0)
 
         # Concatenate inputs for transformer
         inputs = torch.cat((t_input[None, :, :], y_input[None, :, :], x_input[None, :, :]), 0)
@@ -627,7 +635,7 @@ class Model_mlp_diff(nn.Module):
 
         # Flatten and add final linear layer
         transformer_out = block_output.transpose(0, 1)  # Roll batch to first dim
-        print(transformer_out.shape)
+
 
 
         flat = torch.flatten(transformer_out, start_dim=1, end_dim=2)

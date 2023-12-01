@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
-folder_path = 'C:/Users/NEZIH YOUNSI/Desktop/Hcapriori_input/Observaton_Context_Tuples'
+folder_path = 'C:/Users/NEZIH YOUNSI/Desktop/Hcapriori_input'
 
 
 def is_valid_chunk(chunk):
@@ -16,18 +16,21 @@ def is_valid_chunk(chunk):
 
 def load_data_from_folder(folder_path):
     all_data = []  # This list will hold all our chunks (both observations and actions) from all files.
-
+    total_lines = 0
     # Iterate over each file in the directory
     for file in os.listdir(folder_path):
         # If the file ends with '.txt', we process it
-        if file.endswith(".txt"):
+        if file.endswith("combined_file.txt"):
             with open(os.path.join(folder_path, file), 'r') as f:
                 # Read the lines and filter out any empty ones.
                 lines = f.readlines()
+                total_lines += len(lines)
+                print(f"Total number of lines processed: {total_lines}")
                 non_empty_lines = [line.strip() for line in lines if line.strip() != ""]
 
                 # Transform the non-empty line strings into actual list of tuples.
                 chunks = [eval(line) for line in non_empty_lines]
+
 
                 # Extract observation, action and chunk descriptor
                 observation_chunks = [chunk[:-1] for chunk in chunks[::2]]  # get all tuples except the last one
@@ -45,7 +48,7 @@ def load_data_from_folder(folder_path):
 
                 # Extend the all_data list with the observation, action, and chunk descriptor
                 all_data.extend(list(zip(observation_chunks, action_chunks, chunk_descriptors)))
-
+    print(f"Total number of lines processed: {total_lines}")
     return all_data  # Return the master list containing chunks from all files
 
 
@@ -182,4 +185,45 @@ embedder = EventEmbedder(num_event_types, event_embedding_dim, continuous_embedd
 #         optimizer.zero_grad()
 #         loss.backward()
 #         optimizer.step()
+
+
+#
+    #     # Convert tuples into tensors for PyTorch
+    #     observation_tensor = torch.tensor(observation, dtype=torch.float32)
+    #     action_tensor = torch.tensor(action, dtype=torch.float32)
+    #     chunk_descriptor_tensor = torch.tensor(chunk_descriptor, dtype=torch.float32)
+    #
+    #     return observation_tensor, action_tensor, chunk_descriptor_tensor
+    #
+    # #Padding same length action and obs
+    # def collate_fn(batch):
+    #     observations, actions, chunk_descriptors = zip(*batch)
+    #
+    #     # Determine the maximum sequence length
+    #     max_len = max(max(len(obs) for obs in observations), max(len(act) for act in actions))
+    #
+    #     # Pad sequences
+    #     observations_padded = torch.nn.utils.rnn.pad_sequence(observations, batch_first=True, padding_value=0)
+    #     actions_padded = torch.nn.utils.rnn.pad_sequence(actions, batch_first=True, padding_value=0)
+    #
+    #     # Determine the maximum length across both observations and actions
+    #     max_length = max(observations_padded.shape[1], actions_padded.shape[1])
+    #
+    #     # Manually pad to the maximum length
+    #     if observations_padded.shape[1] < max_length:
+    #         # Calculate padding size
+    #         padding_size = max_length - observations_padded.shape[1]
+    #         # Pad observations
+    #         observations_padded = torch.cat([observations_padded,
+    #                                          torch.zeros(observations_padded.shape[0], padding_size,
+    #                                                      observations_padded.shape[2])], dim=1)
+    #
+    #     if actions_padded.shape[1] < max_length:
+    #         # Calculate padding size
+    #         padding_size = max_length - actions_padded.shape[1]
+    #         # Pad actions
+    #         actions_padded = torch.cat(
+    #             [actions_padded, torch.zeros(actions_padded.shape[0], padding_size, actions_padded.shape[2])], dim=1)
+    #
+    #     return observations_padded, actions_padded, torch.stack(chunk_descriptors)
 
