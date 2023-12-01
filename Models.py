@@ -56,122 +56,6 @@ class EventEmbedder(nn.Module):
         return output
 
 
-# class Model_mlp_mse(nn.Module):
-#     # NN with three relu hidden layers
-#     # quantile outputs are independent of eachother
-#     def __init__(
-#             self,
-#             n_input,
-#             n_hidden,
-#             n_output,
-#             is_dropout=False,
-#             is_batch=False,
-#             activation="relu",
-#     ):
-#         super(Model_mlp_mse, self).__init__()
-#         self.layer1 = nn.Linear(n_input, n_hidden, bias=True)
-#         self.layer2 = nn.Linear(n_hidden, n_hidden, bias=True)
-#         self.layer3 = nn.Linear(n_hidden, n_hidden, bias=True)
-#         self.layer4 = nn.Linear(n_hidden, n_output, bias=True)
-#         self.drop1 = nn.Dropout(0.333)
-#         self.drop2 = nn.Dropout(0.333)
-#         self.drop3 = nn.Dropout(0.333)
-#         self.batch1 = nn.BatchNorm1d(n_hidden)
-#         self.batch2 = nn.BatchNorm1d(n_hidden)
-#         self.batch3 = nn.BatchNorm1d(n_hidden)
-#         self.is_dropout = is_dropout
-#         self.is_batch = is_batch
-#         self.activation = activation
-#         self.loss_fn = nn.MSELoss()
-#
-#     def forward_net(self, x):
-#         x = self.layer1(x)
-#         if self.activation == "relu":
-#             x = torch.relu(x)
-#         elif self.activation == "gelu":
-#             x = torch.nn.functional.gelu(x)
-#         else:
-#             raise Exception("bad activation passed in")
-#         if self.is_dropout:
-#             x = self.drop1(x)
-#         if self.is_batch:
-#             x = self.batch1(x)
-#
-#         x = self.layer2(x)
-#         if self.activation == "relu":
-#             x = torch.relu(x)
-#         elif self.activation == "gelu":
-#             x = torch.nn.functional.gelu(x)
-#         if self.is_dropout:
-#             x = self.drop2(x)
-#         if self.is_batch:
-#             x = self.batch2(x)
-#
-#         # uncomment for 3 hidden layer
-#         x = self.layer3(x)
-#         if self.activation == "relu":
-#             x = torch.relu(x)
-#         elif self.activation == "gelu":
-#             x = torch.nn.functional.gelu(x)
-#         if self.is_dropout:
-#             x = self.drop3(x)
-#         if self.is_batch:
-#             x = self.batch3(x)
-#
-#         x = self.layer4(x)
-#         return x
-#
-#     def forward(self, x):
-#         # we write this in this was so can reuse forward_net in Model_mlp_diff
-#         return self.forward_net(x)
-#
-#     def loss_on_batch(self, x_batch, y_batch):
-#         # add this here so can sync w diffusion model
-#         y_pred_batch = self(x_batch)
-#         loss = self.loss_fn(y_pred_batch, y_batch)
-#         return loss
-#
-#     def sample(self, x_batch):
-#         return self(x_batch)
-
-# class Model_mlp_diff(Model_mlp_mse):
-#
-#     def __init__(self, event_embedder, x_dim, y_dim, t_dim, n_hidden, is_dropout=False,
-#                  is_batch=False, activation="relu"):
-#         # Calculate the new input dimension
-#         # Instantiate TimeSiren
-#         time_siren = TimeSiren(1, event_embedder.output_dim)
-#         # Assuming event_embedder, action_embedder, and time_siren output fixed-size embeddings
-#         embedded_x_dim = event_embedder.output_dim
-#         #embedded_y_dim = event_embedder.output_dim
-#         embedded_t_dim = time_siren.output_dim
-#         n_input = embedded_x_dim + y_dim + embedded_t_dim
-#
-#         # Output dimension remains the same
-#         n_output = y_dim
-#
-#         super(Model_mlp_diff, self).__init__(n_input, n_hidden, n_output, is_dropout, is_batch, activation)
-#
-#         self.event_embedder = event_embedder
-#         self.time_siren = time_siren
-#
-#     def forward(self, y, x, t):
-#         # Embed the observation, action, and time step
-#
-#         #embedded_y = self.event_embedder(y)
-#         embedded_x = self.event_embedder(x)
-#         embedded_t = self.time_siren(t)
-#
-#         embedded_t_expanded = embedded_t.unsqueeze(1).expand(-1, y.shape[1], -1)
-#
-#         # Concatenate all inputs
-#         nn_input = torch.cat([y, embedded_x, embedded_t_expanded], dim=-1)
-#         return self.forward_net(nn_input)
-#
-#     def sample(self, x_batch):
-#         raise NotImplementedError
-
-
 def ddpm_schedules(beta1, beta2, T, is_linear=True):
     """
     Returns pre-computed schedules for DDPM sampling, training process.
@@ -635,8 +519,6 @@ class Model_mlp_diff(nn.Module):
 
         # Flatten and add final linear layer
         transformer_out = block_output.transpose(0, 1)  # Roll batch to first dim
-
-
 
         flat = torch.flatten(transformer_out, start_dim=1, end_dim=2)
         out = self.final(flat)
