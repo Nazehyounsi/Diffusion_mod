@@ -14,6 +14,8 @@ from Models import Model_mlp_diff,  Model_Cond_Diffusion, EventEmbedder
 
 import wandb
 
+os.environ["WANDB_MODE"] = "offline"
+
 DATASET_PATH = "dataset"
 SAVE_DATA_DIR = "output"  # for models/data
 
@@ -231,12 +233,12 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
     tf = transforms.Compose([])
 
     # Update the dataset path here (dataset for local run)
-    #folder_path = 'C:/Users/NEZIH YOUNSI/Desktop/Hcapriori_input/Observaton_Context_Tuples'
+    folder_path = 'C:/Users/NEZIH YOUNSI/Desktop/Hcapriori_input/Observaton_Context_Tuples'
 
-    #Dataset for gpu
-    folder_path = '~/Observaton_Context_Tuples'
-    expanded_folder_path = os.path.expanduser(folder_path)
-    folder_path = expanded_folder_path
+    # #Dataset for gpu
+    # folder_path = '~/Observaton_Context_Tuples'
+    # expanded_folder_path = os.path.expanduser(folder_path)
+    # folder_path = expanded_folder_path
 
 
 
