@@ -8,8 +8,10 @@ from sklearn.neighbors import KernelDensity
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from torchvision import transforms
-from torch.nn.utils.rnn import pad_sequence
+
 from Models import Model_mlp_diff,  Model_Cond_Diffusion, EventEmbedder
+
+import wandb
 
 DATASET_PATH = "dataset"
 SAVE_DATA_DIR = "output"  # for models/data
@@ -22,6 +24,19 @@ EXPERIMENTS = [
     },
 ]
 
+# start a new wandb run to track this script
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="Diffusion Model training 1.0",
+
+    # track hyperparameters and run metadata
+    config={
+        "learning_rate": 1e-4,
+        "architecture": "Basic Original Option 0",
+        "dataset": "AnnoMI",
+        "epochs": 100,
+    }
+)
 EXTRA_DIFFUSION_STEPS = [0, 2, 4, 8, 16, 32]
 GUIDE_WEIGHTS = [0.0, 4.0, 8.0]
 
@@ -287,6 +302,7 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
             loss_ep += loss.detach().item()
             n_batch += 1
             pbar.set_description(f"train loss: {loss_ep / n_batch:.4f}")
+            wandb.log({"loss": loss})
             optim.step()
         results_ep.append(loss_ep / n_batch)
 
