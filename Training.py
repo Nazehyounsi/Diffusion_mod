@@ -17,7 +17,7 @@ import wandb
 os.environ["WANDB_MODE"] = "offline"
 
 DATASET_PATH = "dataset"
-SAVE_DATA_DIR = "output"  # for models/data
+SAVE_DATA_DIR = "output"
 
 EXPERIMENTS = [
     {
