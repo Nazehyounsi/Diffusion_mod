@@ -8,6 +8,7 @@ from sklearn.neighbors import KernelDensity
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from torchvision import transforms
+from sklearn.metrics import mean_squared_error
 
 from Models import Model_mlp_diff,  Model_Cond_Diffusion, EventEmbedder
 
@@ -229,14 +230,21 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
     # get datasets set up
     tf = transforms.Compose([])
 
-    # Update the dataset path here
-    folder_path = 'C:/Users/NEZIH YOUNSI/Desktop/Hcapriori_input/Observaton_Context_Tuples'
+    # Update the dataset path here (dataset for local run)
+    #folder_path = 'C:/Users/NEZIH YOUNSI/Desktop/Hcapriori_input/Observaton_Context_Tuples'
+
+    #Dataset for gpu
+    folder_path = '~/Observaton_Context_Tuples'
+    expanded_folder_path = os.path.expanduser(folder_path)
+    folder_path = expanded_folder_path
+
+
 
     # Use MyCustomDataset instead of ClawCustomDataset
     torch_data_train = MyCustomDataset(folder_path, train_or_test="train", train_prop=0.90)
-    #test_dataset = MyCustomDataset(folder_path, train_or_test="test")
+    test_dataset = MyCustomDataset(folder_path, train_or_test="test")
     dataload_train = DataLoader(torch_data_train, batch_size=batch_size, shuffle=False, collate_fn=MyCustomDataset.collate_fn)
-    #test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
     # Calculate the total number of batches
     total_batches = len(dataload_train)
@@ -360,6 +368,33 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
             true_exp_name = f"{exp_name}_guide-weight_{guide_weight}"
         with open(os.path.join(SAVE_DATA_DIR, f"{true_exp_name}.pkl"), "wb") as f:
             pickle.dump(idxs_data, f)
+
+    # def evaluate_model(test_dataloader, model, device):
+    #     model.eval()
+    #     total_mse = 0.0
+    #     total_samples = 0
+    #
+    #     with torch.no_grad():
+    #         for x_batch, y_batch, _ in test_dataloader:
+    #             x_batch = x_batch.to(device)
+    #             y_batch = y_batch.to(device)
+    #
+    #             # Use the model's sampling method to generate predictions
+    #             y_pred = model.sample(x_batch)  # Adjust this line based on your model's sampling method
+    #
+    #             # Calculate MSE for the batch
+    #             mse = mean_squared_error(y_batch.cpu().numpy(), y_pred.cpu().numpy())
+    #             total_mse += mse * x_batch.size(0)
+    #             total_samples += x_batch.size(0)
+    #
+    #     # Calculate average MSE over all batches
+    #     avg_mse = total_mse / total_samples
+    #     return avg_mse
+    #
+
+    # AFTER TRAINING LOOP CALL THE EVAL METHODE
+    # avg_mse = evaluate_model(test_dataloader, model, device)
+    # print(f"Average MSE on Test Set: {avg_mse}")
 
 
 if __name__ == "__main__":
