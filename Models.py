@@ -93,7 +93,7 @@ def ddpm_schedules(beta1, beta2, T, is_linear=True):
     }
 
 class Model_Cond_Diffusion(nn.Module):
-    def __init__(self, nn_model, betas, n_T, device, x_dim, y_dim, drop_prob=0.1, guide_w=0.0):
+    def __init__(self, nn_model, event_embedder, betas, n_T, device, x_dim, y_dim, drop_prob=0.1, guide_w=0.0):
         super(Model_Cond_Diffusion, self).__init__()
         for k, v in ddpm_schedules(betas[0], betas[1], n_T).items():
             self.register_buffer(k, v)
@@ -101,6 +101,8 @@ class Model_Cond_Diffusion(nn.Module):
         self.nn_model = nn_model
         self.n_T = n_T
         self.device = device
+        self.event_embedder = event_embedder
+        self.x_sequence_transformer = SequenceTransformer(16, 16, 8)
         self.drop_prob = drop_prob
         self.loss_mse = nn.MSELoss()
         self.x_dim = x_dim
@@ -121,7 +123,7 @@ class Model_Cond_Diffusion(nn.Module):
         # add noise to clean target actions
         y_t = self.sqrtab[_ts] * y_batch + self.sqrtmab[_ts] * noise
         # use nn model to predict noise
-        noise_pred_batch = self.nn_model(y_t, x_batch, _ts / self.n_T)
+        noise_pred_batch = self.nn_model(y_t, x_batch, _ts / self.n_T) #ici possible d'ajouter context_mask en input
 
         # return mse between predicted and true noise
         return self.loss_mse(noise, noise_pred_batch)
@@ -135,10 +137,12 @@ class Model_Cond_Diffusion(nn.Module):
         # how many noisy actions to begin with
         n_sample = x_batch.shape[0]
 
-        y_shape = (n_sample, self.y_dim)
+        y_shape = (n_sample, 3)
+
 
         # sample initial noise, y_0 ~ N(0, 1),
         y_i = torch.randn(y_shape).to(self.device)
+
 
         if not is_zero:
             if len(x_batch.shape) > 2:
@@ -155,7 +159,10 @@ class Model_Cond_Diffusion(nn.Module):
             context_mask = torch.zeros(x_batch.shape[0]).to(self.device)
 
         if extract_embedding:
-            x_embed = self.nn_model.embed_context(x_batch)
+            print("x_batch embedding already done")
+        #     #x_embed = self.nn_model.embed_context(x_batch)
+        #     x = self.event_embedder(x_batch)
+        #     x_embed = self.x_sequence_transformer(x)
 
         # run denoising chain
         y_i_store = []  # if want to trace how y_i evolved
@@ -170,11 +177,11 @@ class Model_Cond_Diffusion(nn.Module):
 
             z = torch.randn(y_shape).to(self.device) if i > 1 else 0
 
-            # split predictions and compute weighting
+
             if extract_embedding:
-                eps = self.nn_model(y_i, x_batch, t_is, context_mask, x_embed)
+                eps = self.nn_model(y_i, x_batch, t_is) #ici possible d'input le context_mask
             else:
-                eps = self.nn_model(y_i, x_batch, t_is, context_mask)
+                eps = self.nn_model(y_i, x_batch, t_is)
             if not is_zero:
                 eps1 = eps[:n_sample]
                 eps2 = eps[n_sample:]
@@ -187,7 +194,7 @@ class Model_Cond_Diffusion(nn.Module):
         if return_y_trace:
             return y_i, y_i_store
         else:
-            return y_i
+            return y_i  # Ici les y_i representes la suite de y denoisé step par step pr un sample donnée (du bruit z  au y definitif)
 
     def sample_update(self, x_batch, betas, n_T, return_y_trace=False):
         original_nT = self.n_T

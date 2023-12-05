@@ -1,5 +1,6 @@
 
 from itertools import product
+import random
 import pickle
 import numpy as np
 import os
@@ -10,11 +11,13 @@ from tqdm import tqdm
 from torchvision import transforms
 from sklearn.metrics import mean_squared_error
 
-from Models import Model_mlp_diff,  Model_Cond_Diffusion, EventEmbedder
+from Models import Model_mlp_diff,  Model_Cond_Diffusion, EventEmbedder, SequenceTransformer
 
 import wandb
 
-os.environ["WANDB_MODE"] = "offline"
+#os.environ["WANDB_MODE"] = "offline" #Server only (or wandb offline command just before wandb online to reactivate)
+# wandb sync --sync-all : command pour synchroniser les meta données sur le site
+#rm -r wandb (remove les meta données un fois le train fini)
 
 DATASET_PATH = "dataset"
 SAVE_DATA_DIR = "output"
@@ -43,7 +46,7 @@ wandb.init(
 EXTRA_DIFFUSION_STEPS = [0, 2, 4, 8, 16, 32]
 GUIDE_WEIGHTS = [0.0, 4.0, 8.0]
 
-n_epoch = 100
+n_epoch = 1
 lrate = 1e-4
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 n_hidden = 512
@@ -246,7 +249,7 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
     torch_data_train = MyCustomDataset(folder_path, train_or_test="train", train_prop=0.90)
     test_dataset = MyCustomDataset(folder_path, train_or_test="test")
     dataload_train = DataLoader(torch_data_train, batch_size=batch_size, shuffle=False, collate_fn=MyCustomDataset.collate_fn)
-    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False, collate_fn=MyCustomDataset.collate_fn)
 
     # Calculate the total number of batches
     total_batches = len(dataload_train)
@@ -273,6 +276,7 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
             event_embedder, y_dim, net_type="transformer").to(device)
         model = Model_Cond_Diffusion(
             nn_model,
+            event_embedder,
             betas=(1e-4, 0.02),
             n_T=n_T,
             device=device,
@@ -312,64 +316,78 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
             loss_ep += loss.detach().item()
             n_batch += 1
             pbar.set_description(f"train loss: {loss_ep / n_batch:.4f}")
-            wandb.log({"loss": loss})
+            #wandb.log({"loss": loss})
             optim.step()
         results_ep.append(loss_ep / n_batch)
 
     model.eval()
     test_results = []
-    #idxs = [14, 2, 0, 9, 5, 35, 16]
+
+    #num_samples = 100
+    #idxs = random.sample(range(len(test_dataset)),num_samples) # To sample n random data point from test data then duplicate it ...
+
     extra_diffusion_steps = EXTRA_DIFFUSION_STEPS if exp_name == "diffusion" else [0]
     use_kde = [False, True] if exp_name == "diffusion" else [False]
     guide_weight_list = GUIDE_WEIGHTS if exp_name == "cfg" else [None]
-    #idxs_data = [[] for _ in range(len(idxs))]
-    for extra_diffusion_step, guide_weight, use_kde in product(extra_diffusion_steps, guide_weight_list, use_kde):
+
+    #Possible to replace this big loop by direcly fixing values for extra_diffusion step, guide_weight_lists and use kde
+    for extra_diffusion_step, guide_weight, use_kde in product(extra_diffusion_steps, guide_weight_list, use_kde): # cette loop sert a test les perf avec les differentes config
         if extra_diffusion_step != 0 and use_kde:
             continue
-        for x_batch, y_batch, _ in test_dataloader:
-            x_eval = x_batch.to(device)
-
+        # for idx in idxs: # To sample n random data point from test data then duplicate it ...
+        #     print("new sample being tested")
+        #     # Retrieve the data point from the test dataset
+        #     x_eval, _, _ = test_dataset[idx]
+        #     x_eval = x_eval.to(device)
+        for x_batch, y_batch,_ in test_dataloader:
+            print("new batch is being processed")
             for j in range(6 if not use_kde else 300):
-                x_eval_ = x_eval.repeat(50, 1, 1, 1)
-                with torch.no_grad():  # Use torch.no_grad() for evaluation
-                    if exp_name == "cfg":
-                        model.guide_w = guide_weight
-                    if model_type != "diffusion":
-                        y_pred_ = model.sample(x_eval_).detach().cpu().numpy()
-                    else:
-                        if extra_diffusion_step == 0:
-                            y_pred_ = model.sample(x_eval_, extract_embedding=True).detach().cpu().numpy()
-                            if use_kde:
-                                # kde
-                                torch_obs_many = x_eval_
-                                action_pred_many = model.sample(torch_obs_many).cpu().numpy()
-                                # fit kde to the sampled actions
-                                kde = KernelDensity(kernel='gaussian', bandwidth=0.1).fit(action_pred_many)
-                                # choose the max likelihood one
-                                log_density = kde.score_samples(action_pred_many)
-                                idx = np.argmax(log_density)
-                                y_pred_ = action_pred_many[idx][None, :]
+                    # x_eval_ = x_eval.repeat(10, 1, 1) # To sample n random data point from test data then duplicate it ...
+                    x_eval_ = x_batch
+                    with torch.no_grad():  # Use torch.no_grad() for evaluation
+                        if exp_name == "cfg":
+                            model.guide_w = guide_weight
+                        if model_type != "diffusion":
+                            y_pred_ = model.sample(x_eval_).detach().cpu().numpy()
                         else:
-                            y_pred_ = model.sample_extra(x_eval_,
-                                                         extra_steps=extra_diffusion_step).detach().cpu().numpy()
-                if j == 0:
-                    y_pred = y_pred_
-                else:
-                    y_pred = np.concatenate([y_pred, y_pred_])
+                            if extra_diffusion_step == 0:
+                                y_pred_ = model.sample(x_eval_, extract_embedding=True).detach().cpu().numpy()
+                                print("predition : ")
+                                print(y_pred_[0])
+                                print("target : ")
+                                print(y_batch[0])
+                                if use_kde:
+                                    # kde
+                                    torch_obs_many = x_eval_
+                                    action_pred_many = model.sample(torch_obs_many).cpu().numpy()
+                                    # fit kde to the sampled actions
+                                    kde = KernelDensity(kernel='gaussian', bandwidth=0.1).fit(action_pred_many)
+                                    # choose the max likelihood one
+                                    log_density = kde.score_samples(action_pred_many)
+                                    idx = np.argmax(log_density)
+                                    y_pred_ = action_pred_many[idx][None, :]
+                                    print(y_pred_)
+                            else:
+                                y_pred_ = model.sample_extra(x_eval_,
+                                                             extra_steps=extra_diffusion_step).detach().cpu().numpy()
+                    if j == 0:
+                        y_pred = y_pred_
+                    else:
+                        y_pred = np.concatenate([y_pred, y_pred_])
 
             # Store or process the predictions as needed
             test_results.append(y_pred)
 
-        # Save data as a pickle
-        true_exp_name = exp_name
-        if extra_diffusion_step != 0:
-            true_exp_name = f"{exp_name}_extra-diffusion_{extra_diffusion_step}"
-        if use_kde:
-            true_exp_name = f"{exp_name}_kde"
-        if guide_weight is not None:
-            true_exp_name = f"{exp_name}_guide-weight_{guide_weight}"
-        with open(os.path.join(SAVE_DATA_DIR, f"{true_exp_name}.pkl"), "wb") as f:
-            pickle.dump(idxs_data, f)
+        # # Save data as a pickle
+        # true_exp_name = exp_name
+        # if extra_diffusion_step != 0:
+        #     true_exp_name = f"{exp_name}_extra-diffusion_{extra_diffusion_step}"
+        # if use_kde:
+        #     true_exp_name = f"{exp_name}_kde"
+        # if guide_weight is not None:
+        #     true_exp_name = f"{exp_name}_guide-weight_{guide_weight}"
+        # with open(os.path.join(SAVE_DATA_DIR, f"{true_exp_name}.pkl"), "wb") as f:
+        #     pickle.dump(idxs_data, f)
 
     # def evaluate_model(test_dataloader, model, device):
     #     model.eval()
