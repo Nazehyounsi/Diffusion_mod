@@ -128,7 +128,7 @@ class Model_Cond_Diffusion(nn.Module):
         # return mse between predicted and true noise
         return self.loss_mse(noise, noise_pred_batch)
 
-    def sample(self, x_batch, return_y_trace=False, extract_embedding=False):
+    def sample(self, x_batch, return_y_trace=False):
         # also use this as a shortcut to avoid doubling batch when guide_w is zero
         is_zero = False
         if self.guide_w > -1e-3 and self.guide_w < 1e-3:
@@ -158,8 +158,7 @@ class Model_Cond_Diffusion(nn.Module):
         else:
             context_mask = torch.zeros(x_batch.shape[0]).to(self.device)
 
-        if extract_embedding:
-            print("x_batch embedding already done")
+
         #     #x_embed = self.nn_model.embed_context(x_batch)
         #     x = self.event_embedder(x_batch)
         #     x_embed = self.x_sequence_transformer(x)
@@ -178,10 +177,10 @@ class Model_Cond_Diffusion(nn.Module):
             z = torch.randn(y_shape).to(self.device) if i > 1 else 0
 
 
-            if extract_embedding:
-                eps = self.nn_model(y_i, x_batch, t_is) #ici possible d'input le context_mask
-            else:
-                eps = self.nn_model(y_i, x_batch, t_is)
+            # if extract_embedding:
+            #     eps = self.nn_model(y_i, x_batch, t_is) #ici possible d'input le context_mask
+
+            eps = self.nn_model(y_i, x_batch, t_is)
             if not is_zero:
                 eps1 = eps[:n_sample]
                 eps2 = eps[n_sample:]
@@ -491,13 +490,17 @@ class Model_mlp_diff(nn.Module):
 
     def forward(self, y, x, t):
 
-        #in the case we need to process separatly observation and past action through different pipelines (not only with weighted event_embedder)
-        # observations = x[:, :-1, :]  # All elements except the last
-        # past_actions = x[:, -1, :]  # Only the last element
-
-
         embedded_t = self.time_siren(t)
 
+        # CHUNK DESCRIPTOR CASE !
+        # in the case we need to process separatly observation and past action through different pipelines (not only with weighted event_embedder)
+        # observations_past_act = x[:, :-1, :]  # All elements except the last
+        # chunk_descriptor = x[:, -1, :] # the last element of x
+        # embed_chunk_descriptor = embedding_class_special_for_chunk_descriptor(chunk_descriptor) (introduce embedding_class in init of model_mlp_diff)
+        # x = self.event_embedder(observation_past_act)
+        # x = x + embed_chunk_descriptor
+
+        #comment this if chunk descriptor case
         x = self.event_embedder(x)
 
         # Transform sequences
