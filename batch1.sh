@@ -13,4 +13,4 @@
 
 #SBATCH --error=%x-%j.err
 
-python .\Training.py --config config1.json --train --gpu
+python Training.py --config config1.json --train --gpu
