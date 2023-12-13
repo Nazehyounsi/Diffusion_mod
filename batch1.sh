@@ -1,6 +1,5 @@
 #!/bin/bash
 
-#SBATCH --partition=Nom_de_la_partition1
 
 #SBATCH --job-name=Config1
 
