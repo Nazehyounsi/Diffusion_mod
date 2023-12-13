@@ -137,6 +137,38 @@ def load_data_from_folder(folder_path):
                 all_data.extend(list(zip(observation_chunks, action_chunks, chunk_descriptors)))
     return all_data  # Return the master list containing chunks from all files
 
+def rare_event_criteria(observation):
+    """
+    Define the criteria to identify a rare event in a sequence.
+
+    :param observation: Observation part of the sequence.
+    :return: Boolean indicating whether the sequence contains a rare event.
+    """
+    # Example criteria: check if a specific event type is in the sequence
+    rare_event_types = [11, 13, 3, 5]   # Define the rare event type
+
+    return any(event[0] in rare_event_types for event in observation)
+
+
+def oversample_sequences(data, rare_event_criteria, oversampling_factor=3):
+    """
+    Oversample sequences that contain rare events.
+    :param data: List of sequences (each sequence is a tuple of observation, action, chunk_descriptor).
+    :param rare_event_criteria: Function to determine if a sequence contains a rare event.
+    :param oversampling_factor: Factor by which to oversample the rare sequences.
+    :return: List of sequences with oversampled rare events.
+    """
+    oversampled_data = []
+    for sequence in data:
+        observation, action, _ = sequence
+        if rare_event_criteria(observation):
+            oversampled_data.extend([sequence] * oversampling_factor)
+        else:
+            oversampled_data.append(sequence)
+    return oversampled_data
+
+
+
 
 def preprocess_data(data):
     filtered_data = [chunk for chunk in data if is_valid_chunk(chunk)]
@@ -182,11 +214,15 @@ def preprocess_data(data):
 # Assuming the functions 'load_data_from_folder' and 'preprocess_data' are defined as in your provided code.
 
 class MyCustomDataset(Dataset):
-    def __init__(self, folder_path, train_or_test="train", train_prop=0.90):
+    def __init__(self, folder_path, train_or_test="train", train_prop=0.90, oversample_rare_events=False):
         # Load and preprocess data
         raw_data = load_data_from_folder(folder_path)
         self.raw_data_length = len(raw_data)
         processed_data = preprocess_data(raw_data)
+
+        # Oversample sequences with rare events
+        if oversample_rare_events and train_or_test == "train":
+            processed_data = oversample_sequences(processed_data, rare_event_criteria)
 
         # Split the data into training and testing based on train_prop
         n_train = int(len(processed_data) * train_prop)
@@ -283,7 +319,7 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
 
 
     # Use MyCustomDataset instead of ClawCustomDataset
-    torch_data_train = MyCustomDataset(folder_path, train_or_test="train", train_prop=0.90)
+    torch_data_train = MyCustomDataset(folder_path, train_or_test="train", train_prop=0.90, oversample_rare_events=True)
     test_dataset = MyCustomDataset(folder_path, train_or_test="test")
     dataload_train = DataLoader(torch_data_train, batch_size=batch_size, shuffle=False, collate_fn=MyCustomDataset.collate_fn)
     test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False, collate_fn=MyCustomDataset.collate_fn)
@@ -291,7 +327,6 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
     # Calculate the total number of batches
     total_batches = len(dataload_train)
     print(f"Total number of batches: {total_batches}")
-    print(f"Number of samples in raw data: {torch_data_train.raw_data_length}")
 
 
     event_embedder = EventEmbedder(num_event_types, event_embedding_dim, continuous_embedding_dim,embed_output_dim, event_weights=None)
