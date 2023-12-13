@@ -10,8 +10,6 @@
 
 #SBATCH --time=600
 
-#SBATCH –mail-type=ALL
-
 #SBATCH –mail-user=Nezih.younsi@sorbonne.universite.fr
 
 #SBATCH --output=%x-%j.out
