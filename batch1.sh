@@ -10,8 +10,6 @@
 
 #SBATCH --time=600
 
-#SBATCH –mail-user=Nezih.younsi@sorbonne.universite.fr
-
 #SBATCH --output=%x-%j.out
 
 #SBATCH --error=%x-%j.err
