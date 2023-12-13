@@ -5,9 +5,9 @@
     "num_T": 50,
     "net_type": "transformer",
     "num_event_types": 43,
-    "event_embedding_dim": 32,
+    "event_embedding_dim": 16,
     "continuous_embedding_dim": 3,
-    "embed_output_dim": 32,
+    "embed_output_dim": 16,
     "extra_diffusion_steps" : [0, 2, 4, 8, 16, 32],
     "guide_weights": [0.0, 4.0, 8.0],
     "dataset": "Annomi"
