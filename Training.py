@@ -12,6 +12,8 @@ from tqdm import tqdm
 from torchvision import transforms
 from sklearn.metrics import mean_squared_error
 import argparse
+from torch.optim.lr_scheduler import ExponentialLR
+from torch.optim.lr_scheduler import StepLR
 
 from Models import Model_mlp_diff,  Model_Cond_Diffusion, EventEmbedder, SequenceTransformer
 
@@ -27,6 +29,7 @@ parser.add_argument('--config', type=str, required=True, help='Path to the confi
 parser.add_argument('--train', action='store_true', help='Run training')
 parser.add_argument('--evaluate', action='store_true',help='Run evaluation')
 parser.add_argument('--gpu', action='store_true',help='Run evaluation')
+parser.add_argument('--expo', action='store_true', help='Run training')
 parser.add_argument('--evaluation_param', type=int, default=10, help='Integer parameter for evaluation (default: 0)')
 
 
@@ -73,6 +76,7 @@ n_hidden = 512
 # Set training parameters from config or defaults
 n_epoch = config.get("num_epochs", 1)
 lrate = config.get("learning_rate", 1e-4)
+gamma = config.get("gamma", 0.1)
 batch_size = config.get("batch_size", 32)
 n_T = config.get("num_T", 50)
 net_type = config.get("net_type", "transformer")
@@ -369,6 +373,11 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
         model.to(device)
         optim = torch.optim.Adam(model.parameters(), lr=lrate)
 
+        if args.expo:
+            scheduler = ExponentialLR(optim, gamma=gamma)
+        else:
+            scheduler = StepLR(optim, step_size=10, gamma=gamma)
+
         for ep in tqdm(range(n_epoch), desc="Epoch"):
             results_ep = [ep]
             model.train()
@@ -392,6 +401,7 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
                 pbar.set_description(f"train loss: {loss_ep / n_batch:.4f}")
                 wandb.log({"loss": loss})
                 optim.step()
+            scheduler.step()
             results_ep.append(loss_ep / n_batch)
 
         torch.save(model.state_dict(), model_path)
