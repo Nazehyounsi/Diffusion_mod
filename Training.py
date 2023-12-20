@@ -330,7 +330,7 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
     torch_data_train = MyCustomDataset(folder_path, train_or_test="train", train_prop=0.90, oversample_rare_events=True)
     test_dataset = MyCustomDataset(folder_path, train_or_test="test")
     dataload_train = DataLoader(torch_data_train, batch_size=batch_size, shuffle=True, collate_fn=MyCustomDataset.collate_fn)
-    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=True, collate_fn=MyCustomDataset.collate_fn)
+    test_dataloader = DataLoader(test_dataset, batch_size=256, shuffle=True, collate_fn=MyCustomDataset.collate_fn)
 
     # Calculate the total number of batches
     total_batches = len(dataload_train)
@@ -507,6 +507,7 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
 
             # Calculate MSE for the entire batch
             mse = np.mean((y_batch.cpu().numpy() - best_predictions) ** 2)
+            wandb.log({"mse": mse})
             total_mse += mse
             total_batches += 1
             test_results.append(best_predictions)
