@@ -14,6 +14,7 @@ from sklearn.metrics import mean_squared_error
 import argparse
 from torch.optim.lr_scheduler import ExponentialLR
 from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import CyclicLR
 
 from Models import Model_mlp_diff,  Model_Cond_Diffusion, EventEmbedder, SequenceTransformer
 
@@ -30,6 +31,7 @@ parser.add_argument('--train', action='store_true', help='Run training')
 parser.add_argument('--evaluate', action='store_true',help='Run evaluation')
 parser.add_argument('--gpu', action='store_true',help='Run evaluation')
 parser.add_argument('--expo', action='store_true', help='Run training')
+parser.add_argument('--cycle', action='store_true', help='Run training')
 parser.add_argument('--evaluation_param', type=int, default=10, help='Integer parameter for evaluation (default: 0)')
 
 
@@ -76,6 +78,8 @@ n_hidden = 512
 # Set training parameters from config or defaults
 n_epoch = config.get("num_epochs", 1)
 lrate = config.get("learning_rate", 1e-4)
+base_lr =config.get("base_lr", 0.00001)
+max_lr =config.get("max_lr", 0.001)
 gamma = config.get("gamma", 0.1)
 batch_size = config.get("batch_size", 32)
 n_T = config.get("num_T", 50)
@@ -325,8 +329,8 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
     # Use MyCustomDataset instead of ClawCustomDataset
     torch_data_train = MyCustomDataset(folder_path, train_or_test="train", train_prop=0.90, oversample_rare_events=True)
     test_dataset = MyCustomDataset(folder_path, train_or_test="test")
-    dataload_train = DataLoader(torch_data_train, batch_size=batch_size, shuffle=False, collate_fn=MyCustomDataset.collate_fn)
-    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False, collate_fn=MyCustomDataset.collate_fn)
+    dataload_train = DataLoader(torch_data_train, batch_size=batch_size, shuffle=True, collate_fn=MyCustomDataset.collate_fn)
+    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=True, collate_fn=MyCustomDataset.collate_fn)
 
     # Calculate the total number of batches
     total_batches = len(dataload_train)
@@ -375,6 +379,11 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
 
         if args.expo:
             scheduler = ExponentialLR(optim, gamma=gamma)
+        elif args.cycle:
+            scheduler = CyclicLR(optim, base_lr, max_lr,
+                                 step_size_up=5 * len(dataload_train),  # 5 times the number of batches in one epoch
+                                 mode='triangular',  # Other modes include 'triangular2', 'exp_range'
+                                 cycle_momentum=False)  # If True, momentum is cycled inversely to learning rate
         else:
             scheduler = StepLR(optim, step_size=10, gamma=gamma)
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-#SBATCH --job-name=Config1
+#SBATCH --job-name=Config10
 
 #SBATCH --nodes=1
 
@@ -13,4 +13,4 @@
 
 #SBATCH --error=%x-%j.err
 
-python Training.py --config config1.json --train --gpu
+python Training.py --config config10.json --train --gpu --cycle
