@@ -7,7 +7,7 @@
 
 #SBATCH --gpus-per-node=2
 
-#SBATCH --time=2500
+#SBATCH --time=2600
 
 #SBATCH --output=%x-%j.out
 
