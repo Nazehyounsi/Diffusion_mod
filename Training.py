@@ -480,70 +480,7 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
         #         # Store or process the predictions as needed
         #         test_results.append(y_pred)
 
-# DIRECT KDE CASE
-        extra_diffusion_steps = 0
-        guide_weight_list = GUIDE_WEIGHTS if exp_name == "cfg" else [None]
-        kde_samples = args.evaluation_param
-        total_test_batches = len(test_dataloader)
-        print(f"Total number of test batches: {total_test_batches}")
-
-        for x_batch, y_batch, _ in test_dataloader:
-            x_batch = x_batch.to(device)
-            y_batch = y_batch.to(device)
-
-            # Generate multiple predictions for KDE
-            all_predictions = []
-            all_traces = []
-            for _ in range(kde_samples):  # Number of predictions to generate for KDE (Find the best number to fit KDE and best predicitons)
-                with torch.no_grad():
-                    # if exp_name == "cfg":
-                    #     model.guide_w = guide_weight
-                    y_pred_= model.sample(x_batch).detach().cpu().numpy()
-                    #y_pred_, y_pred_trace_ = model.sample(x_batch, return_y_trace=True)
-                    all_predictions.append(y_pred_)
-                    #all_traces.append(y_pred_trace_)
-
-            # Apply KDE for each data point and store best predictions
-            best_predictions = np.zeros_like(y_batch.cpu().numpy())
-            #best_traces = []
-            for i in range(y_batch.shape[0]):
-                single_pred_samples = np.array([pred[i] for pred in all_predictions])
-                #single_trace_samples = np.array([trace[i] for trace in all_traces])
-                kde = KernelDensity(kernel='gaussian', bandwidth=0.1).fit(single_pred_samples)
-                log_density = kde.score_samples(single_pred_samples)
-                best_idx = np.argmax(log_density)
-                best_predictions[i] = single_pred_samples[best_idx]
-                #best_traces.append(single_trace_samples[best_idx])
-                print("la target :")
-                print(y_batch[i])
-                print("la prediction :")
-                print(best_predictions[i])
-                mse = (y_batch[i] - best_predictions[i])**2
-                # mse_event_type = mse[0]
-                # print(mse_event_type)
-                # mse_starting_time = mse[1]
-                # print(mse_starting_time)
-                # mse_duration = mse[2]
-                # print(mse_duration)
-                # wandb.log({"mse_event_type": mse_event_type})
-                # wandb.log({"mse_starting_time": mse_starting_time})
-                # wandb.log({"mse_duration": mse_duration})
-
-
-                # Calculate MSE for the entire batch
-                mse_batch = np.mean((y_batch.cpu().numpy() - best_predictions) ** 2)
-                wandb.log({"mse": mse_batch})
-                total_mse += mse_batch
-                total_batches += 1
-                test_results.append(best_predictions)
-
-            # Calculate average MSE over all batches
-            avg_mse = total_mse / total_test_batches
-            wandb.log({"avg_mse": avg_mse})
-            print(f"Average MSE on Test Set: {avg_mse}")
-
-
-    #EVALUATION OF NOISE ESTIMATION
+# EVALUATION OF NOISE ESTIMATION
         noise_estimator = model.nn_model
         loss_mse = nn.MSELoss()
         total_validation_loss = 0.0
@@ -574,18 +511,79 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
         print(f'Average Validation Loss for Noise Estimation: {average_validation_loss}')
 
 
+# DIRECT KDE CASE
+        extra_diffusion_steps = 0
+        guide_weight_list = GUIDE_WEIGHTS if exp_name == "cfg" else [None]
+        kde_samples = args.evaluation_param
+        total_batches = len(test_dataloader)
+        total_mse_event_type = 0.0
+        total_mse_starting_time = 0.0
+        total_mse_duration = 0.0
+        print(f"Total number of test batches: {total_batches}")
+
+        for x_batch, y_batch, _ in test_dataloader:
+            x_batch = x_batch.to(device)
+            y_batch = y_batch.to(device)
+
+            # Generate multiple predictions for KDE
+            all_predictions = []
+            all_traces = []
+            for _ in range(kde_samples):  # Number of predictions to generate for KDE (Find the best number to fit KDE and best predicitons)
+                with torch.no_grad():
+                    # if exp_name == "cfg":
+                    #     model.guide_w = guide_weight
+                    y_pred_= model.sample(x_batch).detach().cpu().numpy()
+                    #y_pred_, y_pred_trace_ = model.sample(x_batch, return_y_trace=True)
+                    all_predictions.append(y_pred_)
+                    #all_traces.append(y_pred_trace_)
+
+            # Apply KDE for each data point and store best predictions
+            best_predictions = np.zeros_like(y_batch.cpu().numpy())
+            #best_traces = []
+            for i in range(y_batch.shape[0]):
+                single_pred_samples = np.array([pred[i] for pred in all_predictions])
+                #single_trace_samples = np.array([trace[i] for trace in all_traces])
+                kde = KernelDensity(kernel='gaussian', bandwidth=0.1).fit(single_pred_samples)
+                log_density = kde.score_samples(single_pred_samples)
+                best_idx = np.argmax(log_density)
+                best_predictions[i] = single_pred_samples[best_idx]
+                # print("la target :")
+                # print(y_batch[i])
+                # print("la prediction :")
+                # print(best_predictions[i])
+
+                # Split the target and predictions into components
+                target_event_type, target_starting_time, target_duration = y_batch.cpu().numpy()[:,0], y_batch.cpu().numpy()[:, 1], y_batch.cpu().numpy()[:, 2]
+                pred_event_type, pred_starting_time, pred_duration = best_predictions[:, 0], best_predictions[:, 1], best_predictions[:, 2]
+
+                # Calculate MSE for each component
+                mse_event_type = np.mean((target_event_type - pred_event_type) ** 2)
+                mse_starting_time = np.mean((target_starting_time - pred_starting_time) ** 2)
+                mse_duration = np.mean((target_duration - pred_duration) ** 2)
+
+                # Log the MSEs for each component
+                wandb.log({"mse_event_type": mse_event_type, "mse_starting_time": mse_starting_time, "mse_duration": mse_duration})
+
+                # Accumulate the total MSEs
+                total_mse_event_type += mse_event_type
+                total_mse_starting_time += mse_starting_time
+                total_mse_duration += mse_duration
+                total_batches += 1
+
+        # Calculate average MSE over all batches
+        avg_mse_event_type = total_mse_event_type / total_batches
+        avg_mse_starting_time = total_mse_starting_time / total_batches
+        avg_mse_duration = total_mse_duration / total_batches
+        wandb.log({"avg_mse_event": avg_mse_event_type})
+        print(f"Average MSE on Test event Set: {avg_mse_event_type}")
+        wandb.log({"avg_mse_starting_time": avg_mse_starting_time})
+        print(f"Average MSE on Test Starting time Set: {avg_mse_starting_time}")
+        wandb.log({"avg_mse_duration": avg_mse_duration})
+        print(f"Average MSE on Test duration Set: {avg_mse_duration}")
 
 
-            # # Save data as a pickle
-            # true_exp_name = exp_name
-            # if extra_diffusion_step != 0:
-            #     true_exp_name = f"{exp_name}_extra-diffusion_{extra_diffusion_step}"
-            # if use_kde:
-            #     true_exp_name = f"{exp_name}_kde"
-            # if guide_weight is not None:
-            #     true_exp_name = f"{exp_name}_guide-weight_{guide_weight}"
-            # with open(os.path.join(SAVE_DATA_DIR, f"{true_exp_name}.pkl"), "wb") as f:
-            #     pickle.dump(idxs_data, f)
+
+
 
 
 

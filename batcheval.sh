@@ -13,4 +13,4 @@
 
 #SBATCH --error=%x-%j.err
 
-python Training.py --config config13.json --evaluate --gpu
+python Training.py --config config13.json --evaluate --gpu --evaluation_param 3
