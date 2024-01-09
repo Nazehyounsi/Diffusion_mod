@@ -2,11 +2,13 @@
 from itertools import product
 import random
 import pickle
+import torch.nn as nn
 import json
 import numpy as np
 import os
 import torch
 from sklearn.neighbors import KernelDensity
+from Models import ddpm_schedules
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from torchvision import transforms
@@ -54,7 +56,7 @@ with open(config_path, 'r') as config_file:
 model_filename = f'saved_model_{config_basename}.pth'
 model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), model_filename)
 
-#os.environ["WANDB_MODE"] = "offline" #Server only (or wandb offline command just before wandb online to reactivate)
+os.environ["WANDB_MODE"] = "offline" #Server only (or wandb offline command just before wandb online to reactivate)
 # wandb sync --sync-all : command pour synchroniser les meta données sur le site
 #rm -r wandb (remove les meta données un fois le train fini)
 
@@ -482,6 +484,8 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
         extra_diffusion_steps = 0
         guide_weight_list = GUIDE_WEIGHTS if exp_name == "cfg" else [None]
         kde_samples = args.evaluation_param
+        total_test_batches = len(test_dataloader)
+        print(f"Total number of test batches: {total_test_batches}")
 
         for x_batch, y_batch, _ in test_dataloader:
             x_batch = x_batch.to(device)
@@ -489,34 +493,85 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
 
             # Generate multiple predictions for KDE
             all_predictions = []
+            all_traces = []
             for _ in range(kde_samples):  # Number of predictions to generate for KDE (Find the best number to fit KDE and best predicitons)
                 with torch.no_grad():
                     # if exp_name == "cfg":
                     #     model.guide_w = guide_weight
-                    y_pred_ = model.sample(x_batch).detach().cpu().numpy()
+                    y_pred_= model.sample(x_batch).detach().cpu().numpy()
+                    #y_pred_, y_pred_trace_ = model.sample(x_batch, return_y_trace=True)
                     all_predictions.append(y_pred_)
+                    #all_traces.append(y_pred_trace_)
 
             # Apply KDE for each data point and store best predictions
             best_predictions = np.zeros_like(y_batch.cpu().numpy())
-            for i in range(batch_size):
+            #best_traces = []
+            for i in range(y_batch.shape[0]):
                 single_pred_samples = np.array([pred[i] for pred in all_predictions])
+                #single_trace_samples = np.array([trace[i] for trace in all_traces])
                 kde = KernelDensity(kernel='gaussian', bandwidth=0.1).fit(single_pred_samples)
                 log_density = kde.score_samples(single_pred_samples)
                 best_idx = np.argmax(log_density)
                 best_predictions[i] = single_pred_samples[best_idx]
+                #best_traces.append(single_trace_samples[best_idx])
+                print("la target :")
+                print(y_batch[i])
+                print("la prediction :")
+                print(best_predictions[i])
+                mse = (y_batch[i] - best_predictions[i])**2
+                # mse_event_type = mse[0]
+                # print(mse_event_type)
+                # mse_starting_time = mse[1]
+                # print(mse_starting_time)
+                # mse_duration = mse[2]
+                # print(mse_duration)
+                # wandb.log({"mse_event_type": mse_event_type})
+                # wandb.log({"mse_starting_time": mse_starting_time})
+                # wandb.log({"mse_duration": mse_duration})
 
-            # Calculate MSE for the entire batch
-            mse = np.mean((y_batch.cpu().numpy() - best_predictions) ** 2)
-            wandb.log({"mse": mse})
-            total_mse += mse
-            total_batches += 1
-            test_results.append(best_predictions)
+
+                # Calculate MSE for the entire batch
+                mse_batch = np.mean((y_batch.cpu().numpy() - best_predictions) ** 2)
+                wandb.log({"mse": mse_batch})
+                total_mse += mse_batch
+                total_batches += 1
+                test_results.append(best_predictions)
 
             # Calculate average MSE over all batches
-            avg_mse = total_mse / total_batches
+            avg_mse = total_mse / total_test_batches
             wandb.log({"avg_mse": avg_mse})
             print(f"Average MSE on Test Set: {avg_mse}")
 
+
+    #EVALUATION OF NOISE ESTIMATION
+        noise_estimator = model.nn_model
+        loss_mse = nn.MSELoss()
+        total_validation_loss = 0.0
+
+        for x_batch, y_batch, _ in test_dataloader:
+            x_batch = x_batch.to(device)
+            y_batch = y_batch.to(device)
+
+            # Sample t uniformly for each data point in the batch
+            t_noise = torch.randint(1, model.n_T + 1, (y_batch.shape[0], 1)).to(device)
+
+            # Randomly sample some noise, noise ~ N(0, 1)
+            noise = torch.randn_like(y_batch).to(device)
+
+            # Add noise to clean target actions
+            y_noised = model.sqrtab[t_noise] * y_batch + model.sqrtmab[t_noise] * noise
+
+            with torch.no_grad():
+                # Use the model to estimate the noise
+                estimated_noise = noise_estimator(y_noised, x_batch, t_noise.float() / model.n_T)
+
+            # Calculate the loss between the true noise and the estimated noise
+            validation_loss = loss_mse(noise, estimated_noise)
+            total_validation_loss += validation_loss.item()
+
+        # Compute the average validation loss
+        average_validation_loss = total_validation_loss / len(test_dataloader)
+        print(f'Average Validation Loss for Noise Estimation: {average_validation_loss}')
 
 
 
