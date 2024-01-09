@@ -547,10 +547,10 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
                 log_density = kde.score_samples(single_pred_samples)
                 best_idx = np.argmax(log_density)
                 best_predictions[i] = single_pred_samples[best_idx]
-                # print("la target :")
-                # print(y_batch[i])
-                # print("la prediction :")
-                # print(best_predictions[i])
+                print("la target :")
+                print(y_batch[i])
+                print("la prediction :")
+                print(best_predictions[i])
 
                 # Split the target and predictions into components
                 target_event_type, target_starting_time, target_duration = y_batch.cpu().numpy()[:,0], y_batch.cpu().numpy()[:, 1], y_batch.cpu().numpy()[:, 2]
