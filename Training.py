@@ -556,10 +556,26 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
                 target_event_type, target_starting_time, target_duration = y_batch.cpu().numpy()[:,0], y_batch.cpu().numpy()[:, 1], y_batch.cpu().numpy()[:, 2]
                 pred_event_type, pred_starting_time, pred_duration = best_predictions[:, 0], best_predictions[:, 1], best_predictions[:, 2]
 
+                # Convert NumPy arrays to PyTorch tensors
+                target_event_type_tensor = torch.tensor(target_event_type)
+                pred_event_type_tensor = torch.tensor(pred_event_type)
+                target_event_type = target_event_type_tensor.float()
+                pred_event_type = pred_event_type_tensor.float()
+
+                target_starting_time_tensor = torch.tensor(target_starting_time)
+                pred_starting_time_tensor = torch.tensor(pred_starting_time)
+                target_starting_time = target_starting_time_tensor.float()
+                pred_starting_time = pred_starting_time_tensor.float()
+
+                target_duration_tensor = torch.tensor(target_duration)
+                pred_duration_tensor = torch.tensor(pred_duration)
+                target_duration = target_duration_tensor.float()
+                pred_duration= pred_duration_tensor.float()
+
                 # Calculate MSE for each component
-                mse_event_type = np.mean((target_event_type - pred_event_type) ** 2)
-                mse_starting_time = np.mean((target_starting_time - pred_starting_time) ** 2)
-                mse_duration = np.mean((target_duration - pred_duration) ** 2)
+                mse_event_type = loss_mse(target_event_type, pred_event_type)
+                mse_starting_time = loss_mse(target_starting_time, pred_starting_time)
+                mse_duration = loss_mse(target_duration, pred_duration)
 
                 # Log the MSEs for each component
                 wandb.log({"mse_event_type": mse_event_type, "mse_starting_time": mse_starting_time, "mse_duration": mse_duration})
@@ -580,11 +596,6 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
         print(f"Average MSE on Test Starting time Set: {avg_mse_starting_time}")
         wandb.log({"avg_mse_duration": avg_mse_duration})
         print(f"Average MSE on Test duration Set: {avg_mse_duration}")
-
-
-
-
-
 
 
 if __name__ == "__main__":

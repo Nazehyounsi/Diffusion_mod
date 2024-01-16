@@ -483,7 +483,8 @@ class Model_mlp_diff(nn.Module):
 
         # Transformer blocks
         self.transformer_block1 = TransformerEncoderBlock(self.trans_emb_dim, self.transformer_dim, self.nheads)
-        # ... other transformer blocks ...
+        self.transformer_block2 = TransformerEncoderBlock(self.trans_emb_dim, self.transformer_dim, self.nheads)
+        self.transformer_block3 = TransformerEncoderBlock(self.trans_emb_dim, self.transformer_dim, self.nheads)
 
         # Final layer to project transformer output to desired output dimension
         self.final = nn.Linear(self.trans_emb_dim * 3, 3)  # Adjust the output dimension as needed
@@ -525,7 +526,9 @@ class Model_mlp_diff(nn.Module):
 
         # Pass through transformer blocks
         block_output = self.transformer_block1(inputs)
-        # ... other transformer blocks ...
+        block_output = self.transformer_block2(block_output)
+        block_output = self.transformer_block3(block_output)
+
 
         # Flatten and add final linear layer
         transformer_out = block_output.transpose(0, 1)  # Roll batch to first dim
