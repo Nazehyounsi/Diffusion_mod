@@ -384,10 +384,6 @@ class SequenceTransformer(nn.Module):
         # Pass through the transformer encoder
         x = self.transformer_encoder(x)
 
-
-
-
-
         # Aggregate sequence information into a single vector (e.g., by averaging)
         x = x.mean(dim=0)
 
@@ -464,27 +460,24 @@ class Model_mlp_diff(nn.Module):
         self.net_type = net_type
 
         # Transformer specific initialization
-        self.nheads = 16  # Number of heads in multihead attention
-        self.trans_emb_dim = 64  # Transformer embedding dimension
+        self.nheads = 32  # Number of heads in multihead attention
+        self.trans_emb_dim = 128  # Transformer embedding dimension
         self.transformer_dim = self.trans_emb_dim * self.nheads
 
         # Initialize SequenceTransformers for y and x
-        self.x_sequence_transformer = SequenceTransformer(event_embedder.output_dim, 16, 8)
-        self.y_sequence_transformer = SequenceTransformer(3, 16, 8)
+        self.x_sequence_transformer = SequenceTransformer(event_embedder.output_dim, 32, 16)
 
 
         # Linear layers to project embeddings to transformer dimension
         self.t_to_input = nn.Linear(event_embedder.output_dim, self.trans_emb_dim)
         self.y_to_input = nn.Linear(3, self.trans_emb_dim)
-        self.x_to_input = nn.Linear(event_embedder.output_dim, self.trans_emb_dim)
+        self.x_to_input = nn.Linear(32, self.trans_emb_dim)
 
         # Positional embedding for transformer
         self.pos_embed = TimeSiren(1, self.trans_emb_dim)
 
         # Transformer blocks
         self.transformer_block1 = TransformerEncoderBlock(self.trans_emb_dim, self.transformer_dim, self.nheads)
-        self.transformer_block2 = TransformerEncoderBlock(self.trans_emb_dim, self.transformer_dim, self.nheads)
-        self.transformer_block3 = TransformerEncoderBlock(self.trans_emb_dim, self.transformer_dim, self.nheads)
 
         # Final layer to project transformer output to desired output dimension
         self.final = nn.Linear(self.trans_emb_dim * 3, 3)  # Adjust the output dimension as needed
@@ -526,8 +519,6 @@ class Model_mlp_diff(nn.Module):
 
         # Pass through transformer blocks
         block_output = self.transformer_block1(inputs)
-        block_output = self.transformer_block2(block_output)
-        block_output = self.transformer_block3(block_output)
 
 
         # Flatten and add final linear layer
