@@ -2,6 +2,7 @@
 from itertools import product
 import random
 import pickle
+from torch.profiler import profile, record_function, ProfilerActivity
 import torch.nn as nn
 import json
 import numpy as np
@@ -23,7 +24,7 @@ from Models import Model_mlp_diff,  Model_Cond_Diffusion, EventEmbedder, Sequenc
 import wandb
 
 
-
+print(torch.cuda.is_available())
 # Create the parser
 parser = argparse.ArgumentParser(description='Train and/or Evaluate the Diffusion Model')
 
