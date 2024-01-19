@@ -37,9 +37,6 @@ parser.add_argument('--expo', action='store_true', help='Run training')
 parser.add_argument('--cycle', action='store_true', help='Run training')
 parser.add_argument('--evaluation_param', type=int, default=10, help='Integer parameter for evaluation (default: 0)')
 
-
-
-
 # Parse arguments
 args = parser.parse_args()
 
@@ -521,6 +518,10 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
         total_mse_starting_time = 0.0
         total_mse_duration = 0.0
         print(f"Total number of test batches: {total_batches}")
+        # Initialize lists to store targets and predictions
+        targets_event_type, preds_event_type = [], []
+        targets_starting_time, preds_starting_time = [], []
+        targets_duration, preds_duration = [], []
 
         for x_batch, y_batch, _ in test_dataloader:
             x_batch = x_batch.to(device)
@@ -552,51 +553,67 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
                 print(y_batch[i])
                 print("la prediction :")
                 print(best_predictions[i])
+                # Collect the targets and predictions for each component
+                targets_event_type.extend(y_batch.cpu().numpy()[:, 0].tolist())
+                preds_event_type.extend(best_predictions[:, 0].tolist())
 
-                # Split the target and predictions into components
-                target_event_type, target_starting_time, target_duration = y_batch.cpu().numpy()[:,0], y_batch.cpu().numpy()[:, 1], y_batch.cpu().numpy()[:, 2]
-                pred_event_type, pred_starting_time, pred_duration = best_predictions[:, 0], best_predictions[:, 1], best_predictions[:, 2]
+                targets_starting_time.extend(y_batch.cpu().numpy()[:, 1].tolist())
+                preds_starting_time.extend(best_predictions[:, 1].tolist())
 
-                # Convert NumPy arrays to PyTorch tensors
-                target_event_type_tensor = torch.tensor(target_event_type)
-                pred_event_type_tensor = torch.tensor(pred_event_type)
-                target_event_type = target_event_type_tensor.float()
-                pred_event_type = pred_event_type_tensor.float()
+                targets_duration.extend(y_batch.cpu().numpy()[:, 2].tolist())
+                preds_duration.extend(best_predictions[:, 2].tolist())
 
-                target_starting_time_tensor = torch.tensor(target_starting_time)
-                pred_starting_time_tensor = torch.tensor(pred_starting_time)
-                target_starting_time = target_starting_time_tensor.float()
-                pred_starting_time = pred_starting_time_tensor.float()
+        # After the loop, log the scatter plots
+        wandb.log({"event_type": wandb.plots.scatter(targets_event_type, preds_event_type, "Target", "Prediction")})
+        wandb.log({"starting_time": wandb.plots.scatter(targets_starting_time, preds_starting_time, "Target", "Prediction")})
+        wandb.log({"duration": wandb.plots.scatter(targets_duration, preds_duration, "Target", "Prediction")})
 
-                target_duration_tensor = torch.tensor(target_duration)
-                pred_duration_tensor = torch.tensor(pred_duration)
-                target_duration = target_duration_tensor.float()
-                pred_duration= pred_duration_tensor.float()
 
-                # Calculate MSE for each component
-                mse_event_type = loss_mse(target_event_type, pred_event_type)
-                mse_starting_time = loss_mse(target_starting_time, pred_starting_time)
-                mse_duration = loss_mse(target_duration, pred_duration)
-
-                # Log the MSEs for each component
-                wandb.log({"mse_event_type": mse_event_type, "mse_starting_time": mse_starting_time, "mse_duration": mse_duration})
-
-                # Accumulate the total MSEs
-                total_mse_event_type += mse_event_type
-                total_mse_starting_time += mse_starting_time
-                total_mse_duration += mse_duration
-                total_batches += 1
-
-        # Calculate average MSE over all batches
-        avg_mse_event_type = total_mse_event_type / total_batches
-        avg_mse_starting_time = total_mse_starting_time / total_batches
-        avg_mse_duration = total_mse_duration / total_batches
-        wandb.log({"avg_mse_event": avg_mse_event_type})
-        print(f"Average MSE on Test event Set: {avg_mse_event_type}")
-        wandb.log({"avg_mse_starting_time": avg_mse_starting_time})
-        print(f"Average MSE on Test Starting time Set: {avg_mse_starting_time}")
-        wandb.log({"avg_mse_duration": avg_mse_duration})
-        print(f"Average MSE on Test duration Set: {avg_mse_duration}")
+        #MSE COMPUTATION CODE
+        #         # Split the target and predictions into components
+        #         target_event_type, target_starting_time, target_duration = y_batch.cpu().numpy()[:,0], y_batch.cpu().numpy()[:, 1], y_batch.cpu().numpy()[:, 2]
+        #         pred_event_type, pred_starting_time, pred_duration = best_predictions[:, 0], best_predictions[:, 1], best_predictions[:, 2]
+        #
+        #         # Convert NumPy arrays to PyTorch tensors
+        #         target_event_type_tensor = torch.tensor(target_event_type)
+        #         pred_event_type_tensor = torch.tensor(pred_event_type)
+        #         target_event_type = target_event_type_tensor.float()
+        #         pred_event_type = pred_event_type_tensor.float()
+        #
+        #         target_starting_time_tensor = torch.tensor(target_starting_time)
+        #         pred_starting_time_tensor = torch.tensor(pred_starting_time)
+        #         target_starting_time = target_starting_time_tensor.float()
+        #         pred_starting_time = pred_starting_time_tensor.float()
+        #
+        #         target_duration_tensor = torch.tensor(target_duration)
+        #         pred_duration_tensor = torch.tensor(pred_duration)
+        #         target_duration = target_duration_tensor.float()
+        #         pred_duration= pred_duration_tensor.float()
+        #
+        #         # Calculate MSE for each component
+        #         mse_event_type = loss_mse(target_event_type, pred_event_type)
+        #         mse_starting_time = loss_mse(target_starting_time, pred_starting_time)
+        #         mse_duration = loss_mse(target_duration, pred_duration)
+        #
+        #         # Log the MSEs for each component
+        #         wandb.log({"mse_event_type": mse_event_type, "mse_starting_time": mse_starting_time, "mse_duration": mse_duration})
+        #
+        #         # Accumulate the total MSEs
+        #         total_mse_event_type += mse_event_type
+        #         total_mse_starting_time += mse_starting_time
+        #         total_mse_duration += mse_duration
+        #         total_batches += 1
+        #
+        # # Calculate average MSE over all batches
+        # avg_mse_event_type = total_mse_event_type / total_batches
+        # avg_mse_starting_time = total_mse_starting_time / total_batches
+        # avg_mse_duration = total_mse_duration / total_batches
+        # wandb.log({"avg_mse_event": avg_mse_event_type})
+        # print(f"Average MSE on Test event Set: {avg_mse_event_type}")
+        # wandb.log({"avg_mse_starting_time": avg_mse_starting_time})
+        # print(f"Average MSE on Test Starting time Set: {avg_mse_starting_time}")
+        # wandb.log({"avg_mse_duration": avg_mse_duration})
+        # print(f"Average MSE on Test duration Set: {avg_mse_duration}")
 
 
 if __name__ == "__main__":
