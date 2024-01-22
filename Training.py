@@ -2,6 +2,11 @@
 from itertools import product
 import random
 import pickle
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+
+from collections import Counter
 from sklearn.metrics import confusion_matrix
 from torch.profiler import profile, record_function, ProfilerActivity
 import torch.nn as nn
@@ -524,7 +529,8 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
         targets_starting_time, preds_starting_time = [], []
         targets_duration, preds_duration = [], []
         # Assuming you have 4 possible event types: 16, 0, 26, 30
-        action_types = ["mouth_up", "neutral", "nose_wrinkle", "mouth_down"]
+        action_types = [16, 0, 26, 30]
+        class_names = ["16", "0", "26", "30"]
 
         # Initialize arrays to store true and predicted event types
         true_event_types = []
@@ -556,47 +562,68 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
                 log_density = kde.score_samples(single_pred_samples)
                 best_idx = np.argmax(log_density)
                 best_predictions[i] = single_pred_samples[best_idx]
-                print("la target :")
-                print(y_batch[i])
-                print("la prediction :")
-                print(best_predictions[i])
+                # print("la target :")
+                # print(y_batch[i])
+                # print("la prediction :")
+                # print(best_predictions[i])
 
-                # Graph same space : Collect the targets and predictions for each component
-                targets_event_type.extend(y_batch.cpu().numpy()[:, 0].tolist())
-                preds_event_type.extend(best_predictions[:, 0].tolist())
-                targets_starting_time.extend(y_batch.cpu().numpy()[:, 1].tolist())
-                preds_starting_time.extend(best_predictions[:, 1].tolist())
-                targets_duration.extend(y_batch.cpu().numpy()[:, 2].tolist())
-                preds_duration.extend(best_predictions[:, 2].tolist())
+            # Graph same space : Collect the targets and predictions for each component
+            targets_event_type.extend(y_batch.cpu().numpy()[:, 0].tolist())
+            preds_event_type.extend(best_predictions[:, 0].tolist())
+            targets_starting_time.extend(y_batch.cpu().numpy()[:, 1].tolist())
+            preds_starting_time.extend(best_predictions[:, 1].tolist())
+            targets_duration.extend(y_batch.cpu().numpy()[:, 2].tolist())
+            preds_duration.extend(best_predictions[:, 2].tolist())
 
 
-                # Similarity Matrix : Collect the event types in int form
-                true_event_types.extend(y_batch.cpu().numpy()[:, 0].astype(int))
-                # Round the predicted event types and convert to int
-                pred_event_type_rounded = np.rint(best_predictions[:, 0]).astype(int)
-                predicted_event_types.extend(pred_event_type_rounded)
-
-                # Calculate MSE for each sample and accumulate For continious predictions
-                mse_starting_time = ((y_batch.cpu().numpy()[:, 1] - best_predictions[:, 1]) ** 2).mean()
-                mse_duration = ((y_batch.cpu().numpy()[:, 2] - best_predictions[:, 2]) ** 2).mean()
-                total_mse_starting_time += mse_starting_time
-                total_mse_duration += mse_duration
-                num_datapoint += y_batch.shape[0]
+            # Similarity Matrix : Collect the event types in int form
+            true_event_types.extend(y_batch.cpu().numpy()[:, 0].astype(int))
+            # Round the predicted event types and convert to int
+            pred_event_type_rounded = np.rint(best_predictions[:, 0]).astype(int)
+            predicted_event_types.extend(pred_event_type_rounded)
+            # Calculate MSE for each sample and accumulate For continious predictions
+            mse_starting_time = ((y_batch.cpu().numpy()[:, 1] - best_predictions[:, 1]) ** 2).mean()
+            mse_duration = ((y_batch.cpu().numpy()[:, 2] - best_predictions[:, 2]) ** 2).mean()
+            total_mse_starting_time += mse_starting_time
+            total_mse_duration += mse_duration
+            num_datapoint += y_batch.shape[0]
 
         # After the loop, log the scatter plots
         wandb.log({"event_type_target": targets_event_type, "event_type_pred": preds_event_type})
         wandb.log({"starting_time_target": targets_starting_time, "starting_time_pred": preds_starting_time})
         wandb.log({"duration_target": targets_duration, "duration_pred ": preds_duration})
 
-
-        # Compute the confusion matrix
-        cm = confusion_matrix(true_event_types, predicted_event_types, labels=action_types)
-        wandb.log({"confusion_matrix": wandb.plot.confusion_matrix(probs=None, y_true=true_event_types, preds=predicted_event_types, class_names=action_types)})
+        print("scatter done")
 
         # Average MSE per sample
         avg_mse_starting_time_per_sample = total_mse_starting_time / num_datapoint
         avg_mse_duration_per_sample = total_mse_duration / num_datapoint
         wandb.log({"avg_mse_starting_time_per_sample": avg_mse_starting_time_per_sample, "avg_mse_duration_per_sample": avg_mse_duration_per_sample})
+
+        print("Mse done")
+
+        # Compute the confusion matrix
+
+        # Adjust predicted event types when loss > 0.1
+        filtered_pred_event_types = [int(round(pred)) if int(round(pred)) in action_types else action_types[1] for pred in predicted_event_types]
+
+        cm = confusion_matrix(true_event_types, filtered_pred_event_types, labels=action_types)
+        # Plot the confusion matrix using matplotlib
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(cm, annot=True, fmt='g', cmap='Blues', xticklabels=action_types, yticklabels=action_types)
+        plt.xlabel('Predicted')
+        plt.ylabel('True')
+        plt.title('Confusion Matrix')
+
+        # Save the plot to a file
+        plt.savefig("confusion_matrix.png")
+
+        # Log the plot to wandb
+        wandb.log({"confusion_matrix": wandb.Image("confusion_matrix.png")})
+
+        print("Confusion matrix done")
+
+        plt.show()
 
 
 if __name__ == "__main__":
