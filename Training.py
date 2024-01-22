@@ -564,9 +564,9 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
                 preds_duration.extend(best_predictions[:, 2].tolist())
 
         # After the loop, log the scatter plots
-        wandb.log({"event_type": wandb.plots.scatter(targets_event_type, preds_event_type, "Target", "Prediction")})
-        wandb.log({"starting_time": wandb.plots.scatter(targets_starting_time, preds_starting_time, "Target", "Prediction")})
-        wandb.log({"duration": wandb.plots.scatter(targets_duration, preds_duration, "Target", "Prediction")})
+        wandb.log({"event_type_target": targets_event_type, "event_type_pred": preds_event_type})
+        wandb.log({"starting_time_target": targets_starting_time, "starting_time_pred": preds_starting_time})
+        wandb.log({"duration_target": targets_duration, "duration_pred ": preds_duration})
 
 
         #MSE COMPUTATION CODE
