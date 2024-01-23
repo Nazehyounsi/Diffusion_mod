@@ -176,7 +176,7 @@ def rare_event_criteria(observation, action):
     rare_event_types_action = [26, 30]  # Example rare event types for action
 
     rare_observation = any(event[0] in rare_event_types_observation for event in observation)
-    rare_action = any(action_element[0] in rare_event_types_action for action_element[0] in action)
+    rare_action = any(event[0] in rare_event_types_action for event[0] in action)
 
     if rare_observation and rare_action:
         return 'both'
