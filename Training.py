@@ -267,7 +267,7 @@ class MyCustomDataset(Dataset):
         processed_data = preprocess_data(raw_data)
 
         # Oversample sequences with rare events
-        if oversample_rare_events and train_or_test == "train":
+        if oversample_rare_events:
             processed_data = oversample_sequences(processed_data, rare_event_criteria)
 
         # Split the data into training and testing based on train_prop
