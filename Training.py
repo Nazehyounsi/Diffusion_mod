@@ -151,32 +151,51 @@ def load_data_from_folder(folder_path):
                 all_data.extend(list(zip(observation_chunks, action_chunks, chunk_descriptors)))
     return all_data  # Return the master list containing chunks from all files
 
-def rare_event_criteria(observation):
+def rare_event_criteria(observation, action):
     """
     Define the criteria to identify a rare event in a sequence.
-
     :param observation: Observation part of the sequence.
-    :return: Boolean indicating whether the sequence contains a rare event.
+    :param action: Target action part of the sequence.
+    :return: A string indicating the type of rare event ('observation', 'action', 'both', or None).
     """
-    # Example criteria: check if a specific event type is in the sequence
-    rare_event_types = [11, 13, 3, 5]   # Define the rare event type
+    # Define the rare event type for observation and action
+    rare_event_types_observation = [11, 13, 3, 5]
+    rare_event_types_action = [26, 30]  # Example rare event types for action
 
-    return any(event[0] in rare_event_types for event in observation)
+    rare_observation = any(event[0] in rare_event_types_observation for event in observation)
+    rare_action = any(action_element[0] in rare_event_types_action for action_element[0] in action)
+
+    if rare_observation and rare_action:
+        return 'both'
+    elif rare_observation:
+        return 'observation'
+    elif rare_action:
+        return 'action'
+    else:
+        return None
 
 
-def oversample_sequences(data, rare_event_criteria, oversampling_factor=3):
+def oversample_sequences(data, rare_event_criteria, oversampling_factor_obs=3, oversampling_factor_act=2, oversampling_factor_both=3):
     """
-    Oversample sequences that contain rare events.
+    Oversample sequences that contain rare events, with specific factors for observation, action, and both.
     :param data: List of sequences (each sequence is a tuple of observation, action, chunk_descriptor).
-    :param rare_event_criteria: Function to determine if a sequence contains a rare event.
-    :param oversampling_factor: Factor by which to oversample the rare sequences.
+    :param rare_event_criteria: Function to determine the type of rare event in a sequence.
+    :param oversampling_factor_obs: Factor by which to oversample rare sequences in observations.
+    :param oversampling_factor_act: Factor by which to oversample rare sequences in actions.
+    :param oversampling_factor_both: Factor by which to oversample sequences with rare events in both.
     :return: List of sequences with oversampled rare events.
     """
     oversampled_data = []
     for sequence in data:
-        observation, action, _ = sequence
-        if rare_event_criteria(observation):
-            oversampled_data.extend([sequence] * oversampling_factor)
+        observation, action, chunk_descriptor = sequence
+        rare_event_type = rare_event_criteria(observation, action)
+
+        if rare_event_type == 'observation':
+            oversampled_data.extend([sequence] * oversampling_factor_obs)
+        elif rare_event_type == 'action':
+            oversampled_data.extend([sequence] * oversampling_factor_act)
+        elif rare_event_type == 'both':
+            oversampled_data.extend([sequence] * oversampling_factor_both)
         else:
             oversampled_data.append(sequence)
     return oversampled_data
