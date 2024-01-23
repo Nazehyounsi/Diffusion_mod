@@ -366,7 +366,7 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
 
     # Use MyCustomDataset instead of ClawCustomDataset
     torch_data_train = MyCustomDataset(folder_path, train_or_test="train", train_prop=0.90, oversample_rare_events=True)
-    test_dataset = MyCustomDataset(folder_path, train_or_test="test")
+    test_dataset = MyCustomDataset(folder_path, train_or_test="test", train_prop=0.90, oversample_rare_events=True)
     dataload_train = DataLoader(torch_data_train, batch_size=batch_size, shuffle=True, collate_fn=MyCustomDataset.collate_fn)
     test_dataloader = DataLoader(test_dataset, batch_size=256, shuffle=True, collate_fn=MyCustomDataset.collate_fn)
 
