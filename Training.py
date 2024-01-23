@@ -116,6 +116,19 @@ def is_valid_chunk(chunk):
             return False
     return True
 
+# Function to create and log a scatter plot
+def log_scatter_plot(x, y, title, x_label, y_label, key):
+    plt.figure(figsize=(10, 6))
+    plt.scatter(x, y, alpha=0.5)
+    plt.title(title)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.grid(True)
+
+    # Log using wandb
+    wandb.log({key: wandb.Image(plt)})
+    plt.close()
+    
 def load_data_from_folder(folder_path):
     all_data = []  # This list will hold all our chunks (both observations and actions) from all files.
     total_lines = 0
@@ -607,10 +620,11 @@ def train_claw(experiment, n_epoch, lrate, device, n_hidden, batch_size, n_T, ne
             total_mse_duration += mse_duration
             num_datapoint += y_batch.shape[0]
 
-        # After the loop, log the scatter plots
-        wandb.log({"event_type_target": targets_event_type, "event_type_pred": preds_event_type})
-        wandb.log({"starting_time_target": targets_starting_time, "starting_time_pred": preds_starting_time})
-        wandb.log({"duration_target": targets_duration, "duration_pred ": preds_duration})
+
+        # After collecting data in your loop, call the function to create and log plots
+        log_scatter_plot(targets_event_type, preds_event_type, "Event Type Predictions", "Target", "Prediction", "event_type_plot")
+        log_scatter_plot(targets_starting_time, preds_starting_time, "Starting Time Predictions", "Target", "Prediction", "starting_time_plot")
+        log_scatter_plot(targets_duration, preds_duration, "Duration Predictions", "Target", "Prediction", "duration_plot")
 
         print("scatter done")
 
